@@ -1,0 +1,1 @@
+powershell -Command  "Start-Process PowerShell -Verb RunAs -Argument \"%CD%\Install-Apps.ps1\" "
