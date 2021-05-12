@@ -3,12 +3,34 @@ $ProgressPreferenceHidden = "SilentlyContinue";
 $ProgressPreferenceActive = "Continue";
 
 # parameters
-
 $appxFile = "Microsoft.DesktopAppInstaller.appxbundle";
 $sha256File = "SHA256.txt";
 $importFile = "import.json";
+$runtimePackage = "Microsoft.VCLibs.140.00.UWPDesktop";
+
+# urls
+$runtimePackageUrl = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx"
+$wingetLatestReleaseUrl = "https://api.github.com/repos/microsoft/winget-cli/releases/latest";
 
 #region Functions
+
+function Restore-Runtime {
+    <#
+    .NAME
+        Restore-Runtime
+    .SYNOPSIS
+        Updates the runtime for appx bundle installation
+    .DESCRIPTION
+        Downloads and installs C++ Runtime framework packages 
+    .EXAMPLE
+        Restore-Runtime
+    #>
+
+    Write-Host 'Updating runtime...';
+    Add-AppxPackage -Path $runtimePackageUrl;
+    Write-Host '[OK] Runtime updated' -ForegroundColor Green;
+}
+
 function Restore-WinGet {
     <#
     .NAME
@@ -20,13 +42,9 @@ function Restore-WinGet {
     .EXAMPLE
         Restore-WinGet
     #>
-    $wingetLatestReleaseUrl = "https://api.github.com/repos/microsoft/winget-cli/releases/latest";
-
-    # disable progress bar for downloadable assets
-    $ProgressPreference = $ProgressPreferenceHidden;
 
     # send a request for the latest release assets
-    $response = Invoke-WebRequest -Uri $wingetLatestReleaseUrl -Headers @{"accept"="application/json"};
+    $response = Invoke-WebRequest -Uri $wingetLatestReleaseUrl -Headers @{"accept"="application/json"} -UseBasicParsing;
 
     # check if response is ok
     if ($response.StatusCode -ne 200) {
@@ -48,7 +66,7 @@ function Restore-WinGet {
     [string]$appxFileUrl = ($assetUrls | Select-String -Pattern ".appxbundle" )[0];
     [string]$sha256FileUrl = ($assetUrls | Select-String -Pattern ".txt" )[0];
 
-    Write-Host 'WinGet assets found, downloading...' -ForegroundColor Green;
+    Write-Host '[OK] WinGet assets found, downloading...' -ForegroundColor Green;
 
     # download assets
     $appxFilePath = "$($PSScriptRoot)\$($appxFile)";
@@ -57,7 +75,7 @@ function Restore-WinGet {
     Invoke-WebRequest $appxFileUrl -OutFile $appxFilePath;
     Invoke-WebRequest $sha256FileUrl -OutFile $sha256FilePath;
 
-    Write-Host 'WinGet assets downloaded, installing...' -ForegroundColor Green;
+    Write-Host '[OK] WinGet assets downloaded, installing...' -ForegroundColor Green;
 
     # check SHA256 checksum
     $sha256FileContent = Get-Content -Path $sha256FilePath;
@@ -72,10 +90,10 @@ function Restore-WinGet {
     }
 
     # installing
-    $ProgressPreference = $ProgressPreferenceActive;
     Add-AppxPackage -Path $appxFilePath;
 
-    Write-Host 'WinGet restored!' -ForegroundColor Green;
+    Write-Host '[OK] WinGet restored!' -ForegroundColor Green;
+    $ProgressPreference = $ProgressPreferenceActive;
 }
 
 # TODO: Add parameter to choose *.import.json file
@@ -90,7 +108,7 @@ function Install-Apps {
     .EXAMPLE
         Install-Apps
     #>
-    Write-Host 'Installing applications...' -ForegroundColor Green;
+    Write-Host 'Installing applications...';
     winget import -i "$($PSScriptRoot)\$($importFile)";
 }
 
@@ -112,6 +130,10 @@ function Remove-WinGet {
 
 function Run {
     Set-Location $PSScriptRoot;
+    # disable progress bar for downloadable assets
+    $ProgressPreference = $ProgressPreferenceHidden;
+
+    Restore-Runtime;
     Restore-WinGet;
     Install-Apps;
     # Remove-WinGet;
