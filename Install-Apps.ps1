@@ -2,6 +2,9 @@
 $ProgressPreferenceHidden = "SilentlyContinue";
 $ProgressPreferenceActive = "Continue";
 
+# disable progress bar for downloadable assets
+$ProgressPreference = $ProgressPreferenceHidden;
+
 # parameters
 $appxFile = "Microsoft.DesktopAppInstaller.appxbundle";
 $sha256File = "SHA256.txt";
@@ -11,6 +14,27 @@ $runtimePackage = "Microsoft.VCLibs.140.00.UWPDesktop";
 # urls
 $runtimePackageUrl = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx"
 $wingetLatestReleaseUrl = "https://api.github.com/repos/microsoft/winget-cli/releases/latest";
+
+# console messages
+$message = [PSCustomObject]@{
+
+    #processing
+    RuntimeUpdating = "Updating runtime..."
+    WingetDownloading = "WinGet assets found, downloading..."
+    WingetInstalling = "Installing WinGet..."
+    AppsInstalling = "Installing applications..."
+
+    #success
+    RuntimeUpdated = "[OK] Runtime updated"
+    WingetDownloaded = "[OK] WinGet assets downloaded"
+    WingetInstalled = "[OK] WinGet restored"
+    AppsInstalling = "[OK] Applications installed"
+
+    #errors
+    NetworkError = "[ERROR] WinGet can't be downloaded due to network error. Status code: {0}"
+    ResponseEmptyError = "[ERROR] WinGet can't be downloaded. The response body is empty"
+    ChecksumError = "[ERROR] Can't install: appxbundle checksum doesn't match published."
+}
 
 #region Functions
 
@@ -26,9 +50,9 @@ function Restore-Runtime {
         Restore-Runtime
     #>
 
-    Write-Host 'Updating runtime...';
+    Write-Host $message.RuntimeUpdating;
     Add-AppxPackage -Path $runtimePackageUrl;
-    Write-Host '[OK] Runtime updated' -ForegroundColor Green;
+    Write-Host $message.RuntimeUpdated -ForegroundColor Green;
 }
 
 function Restore-WinGet {
@@ -48,13 +72,13 @@ function Restore-WinGet {
 
     # check if response is ok
     if ($response.StatusCode -ne 200) {
-        Write-Host "[ERROR] WinGet can't be downloaded due to network error. Status code: $($response.StatusCode)" -ForegroundColor Red;
+        Write-Host ($message.NetworkError -f $response.StatusCode) -ForegroundColor Red;
         break;
     }
 
     #check if response body is ok
     if ([string]::IsNullOrEmpty($response.Content)) {
-        Write-Host "[ERROR] WinGet can't be downloaded. The response body is empty" -ForegroundColor Red;
+        Write-Host $message.ResponseEmptyError -ForegroundColor Red;
         break;
     }
 
@@ -66,7 +90,7 @@ function Restore-WinGet {
     [string]$appxFileUrl = ($assetUrls | Select-String -Pattern ".appxbundle" )[0];
     [string]$sha256FileUrl = ($assetUrls | Select-String -Pattern ".txt" )[0];
 
-    Write-Host '[OK] WinGet assets found, downloading...' -ForegroundColor Green;
+    Write-Host $message.WingetDownloading;
 
     # download assets
     $appxFilePath = "$($PSScriptRoot)\$($appxFile)";
@@ -75,7 +99,8 @@ function Restore-WinGet {
     Invoke-WebRequest $appxFileUrl -OutFile $appxFilePath;
     Invoke-WebRequest $sha256FileUrl -OutFile $sha256FilePath;
 
-    Write-Host '[OK] WinGet assets downloaded, installing...' -ForegroundColor Green;
+    Write-Host $message.WingetDownloaded -ForegroundColor Green;
+    Write-Host $message.WingetInstalling;
 
     # check SHA256 checksum
     $sha256FileContent = Get-Content -Path $sha256FilePath;
@@ -83,7 +108,7 @@ function Restore-WinGet {
 
     if ($appxFileSha256.Hash.ToLower() -ne $sha256FileContent)
     {
-        Write-Host "[ERROR] Can't install: appxbundle checksum doesn't match published." -ForegroundColor Red;
+        Write-Host $message.ChecksumError -ForegroundColor Red;
         Write-Host "Expected: $($sha256FileContent)" -ForegroundColor Yellow;
         Write-Host "  Actual: $($appxFileSha256.Hash.ToLower())" -ForegroundColor Red;
         break;
@@ -92,7 +117,7 @@ function Restore-WinGet {
     # installing
     Add-AppxPackage -Path $appxFilePath;
 
-    Write-Host '[OK] WinGet restored!' -ForegroundColor Green;
+    Write-Host $message.WingetInstalled -ForegroundColor Green;
     $ProgressPreference = $ProgressPreferenceActive;
 }
 
@@ -108,8 +133,9 @@ function Install-Apps {
     .EXAMPLE
         Install-Apps
     #>
-    Write-Host 'Installing applications...';
+    Write-Host $message.AppsInstalling;
     winget import -i "$($PSScriptRoot)\$($importFile)";
+    Write-Host $message.AppsInstalled;
 }
 
 function Remove-WinGet {
@@ -123,16 +149,13 @@ function Remove-WinGet {
     .EXAMPLE
         Remove-WinGet
     #>
-    winget uninstall --id Microsoft.PowerToys;
-    winget uninstall --id Microsoft.WindowsTerminal;
+    # winget uninstall --id Microsoft.PowerToys;
+    # winget uninstall --id Microsoft.WindowsTerminal;
     Get-AppXPackage Microsoft.DesktopAppInstaller | Remove-AppXPackage;
 }
 
 function Run {
     Set-Location $PSScriptRoot;
-    # disable progress bar for downloadable assets
-    $ProgressPreference = $ProgressPreferenceHidden;
-
     Restore-Runtime;
     Restore-WinGet;
     Install-Apps;
